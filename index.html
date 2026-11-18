@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>El estadio de Tenis Oculto</title>
+<meta name="description" content="Cada seguidor de Tenis Oculto ocupa un asiento. Busca el tuyo.">
+<style>
+  :root { --fondo:#F7F3EA; --tinta:#111; --azul:#1D5FD1; --tierra:#D9622B; --lima:#D7E22B; --gris:#9C9484; --vacio:#E9E1CF; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--fondo); color:var(--tinta); font-family: Rubik, system-ui, -apple-system, "Segoe UI", Arial, sans-serif; }
+  header { background:var(--azul); border-bottom:6px solid var(--tinta); padding:20px 16px; text-align:center; }
+  h1 { margin:0; font-family:"Lilita One", "Arial Black", sans-serif; font-size:clamp(28px,7vw,52px); color:var(--lima);
+       -webkit-text-stroke:2px var(--tinta); letter-spacing:1px; }
+  header p { margin:6px 0 0; color:#fff; font-weight:700; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  .marcador { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:8px 0 14px; }
+  .caja { background:#fff; border:4px solid var(--tinta); border-radius:16px; padding:8px 12px; flex:1 1 90px; max-width:200px; text-align:center; font-size:14px; font-weight:700; }
+  .caja b { display:block; font-family:"Lilita One","Arial Black",sans-serif; font-size:clamp(24px,7vw,34px); }
+  .barra { height:22px; background:#fff; border:4px solid var(--tinta); border-radius:12px; overflow:hidden; }
+  .barra > div { height:100%; background:var(--lima); }
+  .buscador { display:flex; gap:8px; margin:16px 0 6px; }
+  .buscador input { flex:1; min-width:0; font-size:18px; padding:12px; border:4px solid var(--tinta); border-radius:12px; }
+  #resultado { min-height:24px; font-weight:700; margin:4px 0 8px; }
+  #resultado .ficha { display:inline-block; background:var(--lima); border:3px solid var(--tinta); border-radius:12px; padding:6px 10px; margin:2px 4px 2px 0; }
+  .pista { margin:10px auto; background:#fff; border:5px solid var(--tinta); border-radius:18px; padding:6px; }
+  #lienzo { display:block; width:100%; height:auto; touch-action:manipulation; cursor:pointer; }
+  .ayuda { text-align:center; font-size:13px; color:#555; margin:4px 0 10px; }
+  .leyenda { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; font-size:14px; font-weight:700; }
+  .leyenda span::before { content:""; display:inline-block; width:14px; height:14px; border:2px solid var(--tinta); border-radius:3px; margin-right:6px; vertical-align:-2px; background:var(--c); }
+  section { background:#fff; border:4px solid var(--tinta); border-radius:16px; padding:14px 18px; margin:16px 0; }
+  h2 { font-family:"Lilita One","Arial Black",sans-serif; margin:0 0 8px; }
+  ol, ul { margin:0; padding-left:22px; } li { margin:4px 0; }
+  .hecho { color:#3c7a2d; } .gradas div { margin:6px 0; }
+  footer { text-align:center; font-size:13px; color:#555; padding:20px 16px 40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="titulo">EL ESTADIO</h1>
+  <p>Cada seguidor de Tenis Oculto ocupa un asiento. Si se llena, se juega.</p>
+</header>
+<main>
+  <div class="marcador">
+    <div class="caja">Ocupados<b id="ocupados">0</b></div>
+    <div class="caja">Quedan<b id="faltan">0</b></div>
+    <div class="caja">Con nombre<b id="reclamados">0</b></div>
+  </div>
+  <div class="barra" aria-label="Progreso del estadio"><div id="progreso" style="width:0"></div></div>
+
+  <div class="buscador">
+    <input id="q" type="search" placeholder="Busca tu usuario o tu número de asiento" autocomplete="off" aria-label="Buscar asiento">
+  </div>
+  <div id="resultado" aria-live="polite"></div>
+
+  <div class="pista"><canvas id="lienzo" role="img" aria-label="Mapa de la pista con los asientos"></canvas></div>
+  <p class="ayuda">Toca un asiento para ver su número y su fila.</p>
+  <div class="leyenda" id="leyenda"></div>
+
+  <section>
+    <h2>Cómo conseguir tu asiento</h2>
+    <ol>
+      <li><b>Sígueme</b> en YouTube, Instagram o TikTok y ya tienes asiento: cuentas en el marcador y llenas la pista. Cada red es una grada.</li>
+      <li><b>Opcional:</b> si quieres saber tu número, comenta <b>ASIENTO</b> en un vídeo (o <b>ASIENTO ANÓNIMO</b> si no quieres salir con tu nombre). Te respondemos con tu número y tu fila.</li>
+      <li>Los 10 primeros números son <b>fundadores ★</b>.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Gradas</h2>
+    <div class="gradas" id="gradas"></div>
+  </section>
+
+  <section>
+    <h2>Hitos</h2>
+    <ul id="hitos"></ul>
+  </section>
+</main>
+<footer id="pie"></footer>
+
+<!-- Dibujo del recinto y posiciones de los asientos: brand/cierre-estadio.js (el mismo módulo que el final de los vídeos).
+     estadio.py lo incrusta aquí al generar el mapa, para que la página sea un único archivo. -->
+<script>// Cierre común de todos los vídeos: el estadio de Tenis Oculto (1080x1920, canvas 2D).
+//
+// Uso en un render.html:
+//   <\script src="../../brand/brand.js"><\/script>
+//   <\script src="../../brand/cierre-estadio.js" charset="utf-8"><\/script>
+//   <\script src="../../estadio/build/cierre.js" charset="utf-8"><\/script>   <\!-- python3 estadio/estadio.py cierre -->
+//   ...en la escena de cierre:  dibujarCierreEstadio(ctx, p, window.CIERRE)
+// El mapa web (estadio/plantilla_mapa.html) reutiliza dibujarRecinto, asientosEstadio y limitesRecinto.
+//   con p de 0 a 1 a lo largo de la escena (recomendado: 3-4 s, durante la voz de Deuce).
+//
+// Vista cenital de una pista de tenis de verdad, que crece por niveles (CIERRE.nivel):
+//   1 · Pista 7: tierra batida, valla verde y dos gradas pequeñas a los lados (100 asientos).
+//   2 · Pista Central: pista dura azul, gradas en los cuatro lados y marcador (1.000).
+//   3 · Estadio: hierba a rayas, gradas en óvalo, cubierta y focos (10.000).
+// Los asientos se encienden por gradas (YouTube, Instagram, TikTok), parpadea el siguiente libre
+// y debajo va la llamada principal «SÍGUEME Y OCUPA UNO» (comentar ASIENTO es secundario).
+// Ilustración propia en estilo plano: no reproduce fotografías, logotipos ni pistas reales.
+(function (raiz) {
+  const COL = (typeof BRAND !== 'undefined' && BRAND) || raiz.BRAND ||
+    { fondo: '#F7F3EA', tinta: '#111111', azul: '#1D5FD1', tierra: '#D9622B', amarillo: '#D7E22B' };
+  const T = COL.tinta;
+  const FUENTE = 'Lilita, "Lilita One", "Arial Black", sans-serif';
+  const ORDEN = ['youtube', 'instagram', 'tiktok'];
+  const VACIO = '#E9E1CF', CEMENTO = '#D8D4CC', VALLA = '#1F4D3A';
+  const W = 1080, CY = 820;              // centro de la pista; la zona del recinto va de y≈380 a y≈1260
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const ease = t => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
+  const miles = n => String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');   // 1.000 (toLocaleString deja «1000»)
+
+  // ---------------------------------------------------------------- utilidades de dibujo
+  function texto(ctx, s, x, y, tam, relleno, borde) {
+    ctx.font = `${tam}px ${FUENTE}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (borde) { ctx.lineJoin = 'round'; ctx.lineWidth = borde; ctx.strokeStyle = T; ctx.strokeText(s, x, y); }
+    ctx.fillStyle = relleno; ctx.fillText(s, x, y);
+  }
+  function rectR(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function pildora(ctx, x, y, w, h, relleno) {
+    rectR(ctx, x - w / 2, y - h / 2, w, h, h / 2);
+    ctx.fillStyle = relleno; ctx.fill(); ctx.lineWidth = 8; ctx.strokeStyle = T; ctx.stroke();
+  }
+  function pildoraTexto(ctx, s, x, y, tam, alto, relleno, color) {
+    ctx.font = `${tam}px ${FUENTE}`;
+    const m = ctx.measureText && ctx.measureText(s);
+    let w = m && m.width; if (!(w > 0)) w = s.length * tam * 0.6;
+    const ancho = Math.min(1000, w + 2 * tam);
+    if (w > ancho - tam) tam = Math.floor(tam * (ancho - tam) / w);
+    pildora(ctx, x, y, ancho, alto, relleno); texto(ctx, s, x, y + 2, tam, color);
+  }
+
+  // ---------------------------------------------------------------- la pista (medidas reales ITF a escala)
+  // h = largo de la pista de dobles en píxeles. Devuelve la caja exterior (zona de juego + exterior).
+  function pista(ctx, cx, cy, h, sup) {
+    const s = h / 23.77, w = 10.97 * s, ws = 8.23 * s, serv = 6.40 * s;
+    const mx = 3.2 * s, my = 5.5 * s;                       // exterior de la pista
+    const caja = { x: cx - w / 2 - mx, y: cy - h / 2 - my, w: w + 2 * mx, h: h + 2 * my };
+    const exterior = { tierra: '#C4552A', dura: '#3F9B4E', hierba: '#4C8A33' }[sup] || '#C4552A';
+    const juego = { tierra: COL.tierra, dura: COL.azul, hierba: '#5C9E3F' }[sup] || COL.tierra;
+    ctx.fillStyle = exterior; ctx.fillRect(caja.x, caja.y, caja.w, caja.h);
+    if (sup === 'hierba') {                                  // rayas de corte, como en la pieza de marca
+      const n = 12;
+      for (let i = 0; i < n; i++) { ctx.fillStyle = i % 2 ? '#5C9E3F' : '#74B84F'; ctx.fillRect(caja.x, caja.y + i * caja.h / n, caja.w, caja.h / n + 1); }
+    } else { ctx.fillStyle = juego; ctx.fillRect(cx - w / 2, cy - h / 2, w, h); }
+    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(2, s * 0.18);
+    ctx.strokeRect(cx - w / 2, cy - h / 2, w, h);                       // dobles
+    ctx.beginPath();
+    ctx.moveTo(cx - ws / 2, cy - h / 2); ctx.lineTo(cx - ws / 2, cy + h / 2);   // individuales
+    ctx.moveTo(cx + ws / 2, cy - h / 2); ctx.lineTo(cx + ws / 2, cy + h / 2);
+    ctx.moveTo(cx - ws / 2, cy - serv); ctx.lineTo(cx + ws / 2, cy - serv);     // líneas de saque
+    ctx.moveTo(cx - ws / 2, cy + serv); ctx.lineTo(cx + ws / 2, cy + serv);
+    ctx.moveTo(cx, cy - serv); ctx.lineTo(cx, cy + serv);                       // central de saque
+    ctx.moveTo(cx, cy - h / 2); ctx.lineTo(cx, cy - h / 2 + s * 0.3);           // marcas centrales
+    ctx.moveTo(cx, cy + h / 2); ctx.lineTo(cx, cy + h / 2 - s * 0.3);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(3, s * 0.25); ctx.strokeStyle = T;                 // red y postes
+    ctx.beginPath(); ctx.moveTo(cx - w / 2 - s * 0.9, cy); ctx.lineTo(cx + w / 2 + s * 0.9, cy); ctx.stroke();
+    ctx.fillStyle = T; [-1, 1].forEach(d => ctx.fillRect(cx + d * (w / 2 + s * 0.9) - s * 0.25, cy - s * 0.25, s * 0.5, s * 0.5));
+    ctx.lineWidth = 6; ctx.strokeStyle = T; ctx.strokeRect(caja.x, caja.y, caja.w, caja.h);
+    return { caja, s, w, h };
+  }
+
+  // ---------------------------------------------------------------- asientos de cada nivel
+  // Listas de {x, y, t} en orden de ocupación (primero los más cercanos a la pista).
+  function asientosNivel1(caja, cap, porFila) {
+    const lado = porFila / 2, t = 38, paso = 46, sep = 30, filas = Math.ceil(cap / porFila);
+    const y0 = CY - (lado * paso - (paso - t)) / 2, out = [];
+    for (let n = 0; n < cap; n++) {
+      const f = Math.floor(n / porFila), k = n % porFila, izq = k < lado, j = k % lado;
+      const x = izq ? caja.x - sep - (f + 1) * paso + (paso - t) : caja.x + caja.w + sep + f * paso;
+      out.push({ x, y: y0 + j * paso, t });
+    }
+    return { lista: out, filas, paso, t, sep, y0, lado };
+  }
+  function anilloRect(caja, i, n, d0, d) {
+    const e = d0 + i * d, x = caja.x - e, y = caja.y - e, w = caja.w + 2 * e, h = caja.h + 2 * e;
+    const per = 2 * (w + h), out = [];
+    for (let k = 0; k < n; k++) {
+      let u = (k + 0.5) * per / n, px, py;
+      if (u < w) { px = x + u; py = y; } else if ((u -= w) < h) { px = x + w; py = y + u; }
+      else if ((u -= h) < w) { px = x + w - u; py = y + h; } else { u -= w; px = x; py = y + h - u; }
+      out.push({ x: px, y: py });
+    }
+    return out;
+  }
+  function anilloElipse(a, b, n, rot) {
+    const out = [];
+    for (let k = 0; k < n; k++) { const t = rot + 2 * Math.PI * (k + 0.5) / n; out.push({ x: W / 2 + a * Math.cos(t), y: CY + b * Math.sin(t) }); }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- geometría de cada nivel (sin dibujar)
+  // Posiciones de los asientos en orden de ocupación: el asiento n es lista[n - 1].
+  // Es la única fuente de verdad: la usan el cierre de los vídeos y el mapa web.
+  function pistaCaja(h) {
+    const s = h / 23.77, w = 10.97 * s, mx = 3.2 * s, my = 5.5 * s;
+    return { x: W / 2 - w / 2 - mx, y: CY - h / 2 - my, w: w + 2 * mx, h: h + 2 * my };
+  }
+  function geometria(C) {
+    const nivel = C.nivel || 1;
+    if (nivel === 1) {
+      const caja = pistaCaja(560), L = asientosNivel1(caja, C.capacidad, C.por_fila);
+      const alto = L.lado * L.paso + 14, ancho = L.filas * L.paso + 10;
+      const gradas = [caja.x - L.sep - ancho + 5, caja.x + caja.w + L.sep - 5].map(x => ({ x, y: L.y0 - 14, w: ancho, h: alto }));
+      const xs = gradas.map(g => g.x);
+      return { nivel, lista: L.lista, borde: true, caja, gradas,
+        limites: { x: Math.min(...xs) - 20, y: caja.y - 30, w: Math.max(...xs) + ancho - Math.min(...xs) + 40, h: caja.h + 60 } };
+    }
+    if (nivel === 2) {
+      const caja = pistaCaja(400), anillos = Math.ceil(C.capacidad / C.por_fila), d0 = 22, d = 14, e = d0 + (anillos - 1) * d + 14;
+      const lista = [];
+      for (let i = 0; i < anillos; i++) lista.push(...anilloRect(caja, i, C.por_fila, d0, d));
+      lista.forEach(a => { a.t = 10; a.x -= 5; a.y -= 5; });
+      const my = caja.y - e - 30;
+      return { nivel, lista: lista.slice(0, C.capacidad), borde: false, caja, e, marcadorY: my,
+        limites: { x: caja.x - e - 20, y: my - 48, w: caja.w + 2 * e + 40, h: caja.y + caja.h + e + 20 - (my - 48) } };
+    }
+    const anillos = Math.ceil(C.capacidad / C.por_fila), a0 = 175, b0 = 262, d = 6.4;
+    const aF = a0 + anillos * d + 10, bF = b0 + anillos * d + 10;
+    const lista = [];
+    for (let i = 0; i < anillos; i++) lista.push(...anilloElipse(a0 + i * d, b0 + i * d, C.por_fila, i * 0.004));
+    lista.forEach(a => { a.t = 4; a.x -= 2; a.y -= 2; });
+    return { nivel: 3, lista: lista.slice(0, C.capacidad), borde: false, a0, b0, aF, bF,
+      limites: { x: W / 2 - aF - 50, y: CY - bF - 50, w: 2 * aF + 100, h: 2 * bF + 100 } };
+  }
+
+  // ---------------------------------------------------------------- recintos (dibujo)
+  function recinto1(ctx, C, G) {                 // Pista 7: club
+    G.gradas.forEach(g => {                                                       // gradas bajo los asientos
+      rectR(ctx, g.x, g.y, g.w, g.h, 10); ctx.fillStyle = CEMENTO; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = T; ctx.stroke();
+    });
+    const P = pista(ctx, W / 2, CY, 560, 'tierra');
+    ctx.lineWidth = 12; ctx.strokeStyle = VALLA;                                    // valla verde
+    ctx.strokeRect(P.caja.x - 8, P.caja.y - 8, P.caja.w + 16, P.caja.h + 16);
+    ctx.fillStyle = T; ctx.fillRect(P.caja.x + P.caja.w - 26, CY - 16, 18, 32);    // silla de juez
+  }
+  function recinto2(ctx, C, G) {                 // Pista Central: dura, cuatro gradas, marcador
+    const caja = G.caja, e = G.e;
+    rectR(ctx, caja.x - e, caja.y - e, caja.w + 2 * e, caja.h + 2 * e, 26);
+    ctx.fillStyle = CEMENTO; ctx.fill(); ctx.lineWidth = 8; ctx.strokeStyle = T; ctx.stroke();
+    const P = pista(ctx, W / 2, CY, 400, 'dura');
+    ctx.lineWidth = 6; ctx.strokeStyle = T; ctx.strokeRect(P.caja.x - 10, P.caja.y - 10, P.caja.w + 20, P.caja.h + 20);
+    const mx = W / 2, my = G.marcadorY;                                            // marcador
+    rectR(ctx, mx - 130, my - 28, 260, 56, 10); ctx.fillStyle = T; ctx.fill();
+    texto(ctx, '6-4  3-6  7-6', mx, my + 2, 32, COL.amarillo);
+  }
+  function recinto3(ctx, C, G) {                 // Estadio: hierba, óvalo, cubierta y focos
+    const { a0, b0, aF, bF } = G;
+    ctx.beginPath(); ctx.ellipse(W / 2, CY, aF + 24, bF + 24, 0, 0, 2 * Math.PI);   // cubierta
+    ctx.fillStyle = VALLA; ctx.fill(); ctx.lineWidth = 8; ctx.strokeStyle = T; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W / 2, CY, aF, bF, 0, 0, 2 * Math.PI); ctx.fillStyle = CEMENTO; ctx.fill(); ctx.lineWidth = 6; ctx.stroke();
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {                   // focos
+      const x = W / 2 + sx * (aF + 12) * 0.7071, y = CY + sy * (bF + 12) * 0.7071;
+      ctx.beginPath(); ctx.arc(x, y, 16, 0, 2 * Math.PI); ctx.fillStyle = COL.amarillo; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = T; ctx.stroke();
+    });
+    ctx.beginPath(); ctx.ellipse(W / 2, CY, a0 - 6, b0 - 6, 0, 0, 2 * Math.PI); ctx.fillStyle = '#4C8A33'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = T; ctx.stroke();
+    pista(ctx, W / 2, CY, 268, 'hierba');
+  }
+  // Dibuja el recinto del nivel de C (sin asientos) y devuelve su geometría.
+  function dibujarRecinto(ctx, C) {
+    const G = geometria(C);
+    (G.nivel === 3 ? recinto3 : G.nivel === 2 ? recinto2 : recinto1)(ctx, C, G);
+    return G;
+  }
+  // Lista pública de asientos: [{n, fila, x, y, t}], en las coordenadas del vídeo (1080 de ancho).
+  function asientosEstadio(C) {
+    const G = geometria(C), pf = C.por_fila || 1;
+    return G.lista.map((a, i) => ({ n: i + 1, fila: Math.floor(i / pf) + 1, x: a.x, y: a.y, t: a.t }));
+  }
+  function pintarAsiento(ctx, a, relleno, borde) {
+    ctx.fillStyle = relleno; ctx.fillRect(a.x, a.y, a.t, a.t);
+    if (borde) { ctx.lineWidth = 4; ctx.strokeStyle = T; ctx.strokeRect(a.x, a.y, a.t, a.t); }
+  }
+
+  // Color de cada asiento ocupado: bloques consecutivos por grada (YouTube, Instagram, TikTok).
+  function colorAsiento(n, C) {
+    let acum = 0;
+    for (const k of ORDEN) { const g = C.gradas && C.gradas[k]; if (!g) continue; acum += g.seguidores; if (n <= acum) return g.color; }
+    return '#9C9484';
+  }
+
+  // Tira de progreso de niveles: Pista 7 → Pista Central → Estadio
+  function tiraNiveles(ctx, C, y) {
+    const N = C.niveles || [], n = N.length; if (!n) return;
+    const sep = 330, x0 = W / 2 - sep * (n - 1) / 2;
+    ctx.lineWidth = 6; ctx.strokeStyle = T; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + sep * (n - 1), y); ctx.stroke();
+    N.forEach((e, i) => {
+      const x = x0 + i * sep, act = i + 1 === C.nivel, hecho = i + 1 < C.nivel;
+      ctx.beginPath(); ctx.arc(x, y, act ? 26 : 18, 0, 2 * Math.PI);
+      ctx.fillStyle = act ? COL.amarillo : hecho ? COL.tierra : '#FFFFFF'; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = T; ctx.stroke();
+      texto(ctx, e.nombre.toUpperCase(), x, y + 52, act ? 30 : 24, act ? T : '#7A7366');
+      texto(ctx, miles(e.capacidad), x, y + 86, 22, '#7A7366');
+    });
+  }
+
+  function dibujarCierreEstadio(ctx, p, C, opt) {
+    opt = opt || {};
+    if (!C) throw new Error('Falta window.CIERRE: ejecuta «python3 estadio/estadio.py cierre» antes de renderizar.');
+    if (!opt.sinFondo) { ctx.fillStyle = COL.fondo; ctx.fillRect(0, 0, W, 1920); }
+    const nivel = C.nivel || 1;
+
+    texto(ctx, C.estadio.toUpperCase(), W / 2, 190, nivel === 3 ? 74 : 92, COL.amarillo, 14);
+    texto(ctx, C.subtitulo || 'CADA SEGUIDOR, UN ASIENTO', W / 2, 275, 40, T);
+
+    const R = dibujarRecinto(ctx, C);
+    const encendidos = Math.round(Math.min(C.ocupados, R.lista.length) * ease(p / 0.6));
+    const parpadeo = Math.sin(p * Math.PI * 8) > 0;
+    R.lista.forEach((a, i) => {
+      const n = i + 1;
+      let relleno = VACIO;
+      if (n <= encendidos) relleno = colorAsiento(n, C);
+      else if (n === C.siguiente_asiento && p > 0.6) relleno = parpadeo ? COL.amarillo : VACIO;
+      pintarAsiento(ctx, a, relleno, R.borde);
+    });
+
+    const yCont = 1350;
+    texto(ctx, `${encendidos}/${miles(C.capacidad)}`, W / 2, yCont, 120, COL.amarillo, 16);
+    if (p > 0.6) {
+      ctx.save(); ctx.globalAlpha = ease((p - 0.6) / 0.15);
+      if (C.faltan > 0) {
+        if (C.quedan) texto(ctx, C.quedan, W / 2, yCont + 88, 42, T);
+        pildoraTexto(ctx, C.rotulo, W / 2, yCont + 185, 70, 120, COL.azul, '#FFFFFF');
+        pildoraTexto(ctx, '¿TU NÚMERO? COMENTA «ASIENTO»', W / 2, yCont + 292, 38, 76, COL.amarillo, T);
+      } else {
+        pildoraTexto(ctx, C.rotulo, W / 2, yCont + 185, 76, 140, COL.tierra, T);
+      }
+      ctx.restore();
+    }
+    if (!opt.sinNiveles && p > 0.7) {
+      ctx.save(); ctx.globalAlpha = ease((p - 0.7) / 0.15); tiraNiveles(ctx, C, 1755); ctx.restore();
+    }
+  }
+
+  const API = { dibujarCierreEstadio, dibujarRecinto, asientosEstadio, pintarAsiento, colorAsiento,
+    limitesRecinto: C => geometria(C).limites, COLORES: { ...COL, vacio: VACIO, cemento: CEMENTO } };
+  Object.assign(raiz, API);
+  if (typeof module !== 'undefined') module.exports = API;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+const D = {"resumen": {"fecha_datos": "2026-11-18", "gradas": {"youtube": {"nombre": "YouTube", "seguidores": 6, "color": "#D9622B"}, "instagram": {"nombre": "Instagram", "seguidores": 9, "color": "#1D5FD1"}, "tiktok": {"nombre": "TikTok", "seguidores": 0, "color": "#111111"}}, "total": 15, "estadio": "Pista 7", "estadio_indice": 1, "capacidad": 100, "por_fila": 20, "superficie": "tierra", "subtitulo": "PISTA DE CLUB", "ocupados": 15, "faltan": 85, "siguiente_asiento": 16, "reclamados": 0, "proximo_numero": 1, "hito": {"asientos": 25, "premio": "La grada vota el tema de un vídeo entre 3 opciones (encuesta en la comunidad de YouTube y en historias de Instagram).", "faltan": 10}, "sin_dato": []}, "asientos": [], "fundadores": 10, "hitos": [{"asientos": 25, "premio": "La grada vota el tema de un vídeo entre 3 opciones (encuesta en la comunidad de YouTube y en historias de Instagram)."}, {"asientos": 50, "premio": "Vídeo «Nuevos asientos»: Deuce nombra a todos los que han reclamado su asiento."}, {"asientos": 100, "premio": "Pista 7 llena: PARTIDO IMPOSIBLE especial y se abre la Pista Central (1.000 asientos)."}, {"asientos": 250, "premio": "Votación mensual fija: la grada elige un tema cada mes."}, {"asientos": 500, "premio": "Serie especial de 3 vídeos elegida por la grada."}, {"asientos": 1000, "premio": "Pista Central llena: se abre el Estadio Tenis Oculto (10.000 asientos) con vídeo de inauguración."}], "plataformas": {"youtube": {"nombre": "YouTube", "alias": ["yt", "youtube"], "color": "#D9622B"}, "instagram": {"nombre": "Instagram", "alias": ["ig", "insta", "instagram"], "color": "#1D5FD1"}, "tiktok": {"nombre": "TikTok", "alias": ["tt", "tiktok"], "color": "#111111"}}};
+(function () {
+  'use strict';
+  // Regla de seguridad: los nombres de usuario solo se pintan con textContent o en el canvas, nunca como HTML.
+  const $ = id => document.getElementById(id);
+  if (!D || typeof asientosEstadio !== 'function') { $('resultado').textContent = 'Plantilla sin datos: genera el mapa con «python3 estadio/estadio.py mapa».'; return; }
+  const R = D.resumen, P = D.plataformas, COL = window.COLORES;
+  const fmt = n => String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');   // 1.000 (toLocaleString deja «1000»)
+  const C = { nivel: R.estadio_indice, capacidad: R.capacidad, por_fila: R.por_fila, estadio: R.estadio };
+  $('titulo').textContent = R.estadio.toUpperCase();
+  $('ocupados').textContent = fmt(R.ocupados) + '/' + fmt(R.capacidad);
+  $('faltan').textContent = fmt(R.faltan);
+  $('reclamados').textContent = fmt(R.reclamados);
+  $('progreso').style.width = Math.min(100, 100 * R.ocupados / R.capacidad) + '%';
+
+  // ------------------------------------------------------------ asientos
+  const SITIOS = asientosEstadio(C);                    // [{n, fila, x, y, t}] en coordenadas del vídeo
+  const porNumero = new Map(D.asientos.map(a => [a.n, a]));
+  const filaDe = n => Math.floor((n - 1) / R.por_fila) + 1;
+  const grada = a => (P[a.p] || {}).nombre || a.p;
+  const estado = n => porNumero.has(n) ? 'reclamado' : n <= R.ocupados ? 'ocupado' : 'libre';
+  const colorDe = n => { const a = porNumero.get(n); return a ? ((P[a.p] || {}).color || COL.tierra) : n <= R.ocupados ? '#9C9484' : COL.vacio; };
+
+  // ------------------------------------------------------------ lienzo adaptado al móvil
+  const lienzo = $('lienzo'), ctx = lienzo.getContext('2d'), LIM = limitesRecinto(C);
+  let marcados = [], t0 = 0, escala = 1;
+  function dibujar(ahora) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 3), ancho = lienzo.clientWidth || LIM.w;
+    escala = ancho / LIM.w;
+    const W = Math.round(ancho * dpr), H = Math.round(LIM.h * escala * dpr);
+    if (lienzo.width !== W || lienzo.height !== H) { lienzo.width = W; lienzo.height = H; }
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = COL.fondo; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(escala * dpr, 0, 0, escala * dpr, -LIM.x * escala * dpr, -LIM.y * escala * dpr);
+    const G = dibujarRecinto(ctx, C);
+    SITIOS.forEach(s => {
+      pintarAsiento(ctx, s, colorDe(s.n), G.borde);
+      const a = porNumero.get(s.n);
+      if (a && s.n <= D.fundadores && s.t >= 10) estrella(s.x + s.t / 2, s.y + s.t / 2, s.t * 0.36);
+    });
+    const pulso = 0.5 + 0.5 * Math.sin(((ahora || 0) - t0) / 180);
+    marcados.forEach((s, i) => resaltar(s, pulso, i === 0));
+    if (marcados.length) requestAnimationFrame(dibujar);
+  }
+  function estrella(cx, cy, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? r * 0.45 : r; ctx.lineTo(cx + q * Math.cos(a), cy + q * Math.sin(a)); }
+    ctx.closePath(); ctx.fillStyle = COL.amarillo; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = COL.tinta; ctx.stroke();
+  }
+  function resaltar(s, pulso, conEtiqueta) {
+    const cx = s.x + s.t / 2, cy = s.y + s.t / 2, m = Math.max(s.t, 8 / escala);   // visible aunque el asiento sea diminuto
+    ctx.fillStyle = COL.amarillo; ctx.fillRect(cx - m / 2, cy - m / 2, m, m);
+    ctx.lineWidth = 4 / escala; ctx.strokeStyle = COL.tinta; ctx.strokeRect(cx - m / 2, cy - m / 2, m, m);
+    ctx.beginPath(); ctx.arc(cx, cy, m * 0.75 + (10 + 10 * pulso) / escala, 0, 2 * Math.PI);
+    ctx.lineWidth = 5 / escala; ctx.strokeStyle = COL.amarillo; ctx.stroke();
+    ctx.lineWidth = 2 / escala; ctx.strokeStyle = COL.tinta; ctx.stroke();
+    if (!conEtiqueta) return;
+    const txt = 'Nº ' + s.n + ' · FILA ' + s.fila, tam = 15 / escala;      // solo números en el canvas
+    ctx.font = '700 ' + tam + 'px Rubik, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(txt).width + tam, h = tam * 1.8;
+    let bx = Math.min(Math.max(cx, LIM.x + w / 2 + 4), LIM.x + LIM.w - w / 2 - 4), by = cy - m - h;
+    if (by - h / 2 < LIM.y) by = cy + m + h;
+    ctx.fillStyle = COL.tinta; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx - w / 2, by - h / 2, w, h, h / 2) : ctx.rect(bx - w / 2, by - h / 2, w, h); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText(txt, bx, by + tam * 0.05);
+  }
+  window.addEventListener('resize', () => dibujar(performance.now()));
+
+  // ------------------------------------------------------------ resultados (siempre con textContent)
+  const out = $('resultado');
+  function ficha(texto) { const s = document.createElement('span'); s.className = 'ficha'; s.textContent = texto; out.appendChild(s); }
+  function linea(n, a) {
+    const base = `${R.estadio} · fila ${filaDe(n)} · asiento ${n}`;
+    if (a) return `${a.u || 'Anónimo'}: ${base} (grada ${grada(a)})${n <= D.fundadores ? ' ★ fundador' : ''}`;
+    return estado(n) === 'ocupado' ? `${base}: ocupado, sin reclamar` : `${base}: libre`;
+  }
+  function marcar(nums) {
+    marcados = nums.map(n => SITIOS[n - 1]).filter(Boolean); t0 = performance.now();
+    requestAnimationFrame(dibujar);
+  }
+  function buscar(q) {
+    out.textContent = '';
+    q = q.trim().toLowerCase().replace(/^@/, '');
+    if (!q) { marcar([]); return; }
+    if (/^\d+$/.test(q)) {
+      const n = Number(q);
+      if (n < 1 || n > R.capacidad) { out.textContent = `Ese número no existe en ${R.estadio} (asientos 1-${fmt(R.capacidad)}).`; marcar([]); return; }
+      ficha(linea(n, porNumero.get(n))); marcar([n]); return;
+    }
+    const hits = D.asientos.filter(a => a.u && a.u.toLowerCase().replace(/^@/, '').includes(q));
+    if (!hits.length) { out.textContent = 'No encontramos ese usuario. Si ya me sigues, tienes asiento: comenta ASIENTO para saber tu número.'; marcar([]); return; }
+    hits.slice(0, 5).forEach(a => ficha(linea(a.n, a)));
+    if (hits.length > 5) out.appendChild(document.createTextNode(` (+${hits.length - 5})`));
+    marcar(hits.slice(0, 20).map(a => a.n));
+  }
+  $('q').addEventListener('input', e => buscar(e.target.value));
+
+  // Tocar un asiento en la pista
+  lienzo.addEventListener('click', e => {
+    const r = lienzo.getBoundingClientRect(), px = LIM.x + (e.clientX - r.left) / escala, py = LIM.y + (e.clientY - r.top) / escala;
+    let mejor = null, dmin = 18 / escala;
+    SITIOS.forEach(s => { const d = Math.hypot(s.x + s.t / 2 - px, s.y + s.t / 2 - py) - s.t / 2; if (d < dmin) { dmin = d; mejor = s; } });
+    if (!mejor) return;
+    $('q').value = String(mejor.n); buscar(String(mejor.n));
+  });
+
+  // ------------------------------------------------------------ leyenda, gradas, hitos y pie
+  const ley = $('leyenda');
+  const item = (txt, col) => { const s = document.createElement('span'); s.textContent = txt; s.style.setProperty('--c', col); ley.appendChild(s); };
+  Object.values(P).forEach(p => item('Con nombre · ' + p.nombre, p.color));
+  item('Ocupado sin reclamar', 'var(--gris)'); item('Libre', 'var(--vacio)');
+
+  const gr = $('gradas');
+  Object.values(R.gradas).forEach(g => {
+    const d = document.createElement('div');
+    d.textContent = `${g.nombre}: ${fmt(g.seguidores)} asientos`;
+    gr.appendChild(d);
+  });
+
+  const hl = $('hitos');
+  D.hitos.forEach(h => {
+    const li = document.createElement('li');
+    const ok = R.total >= h.asientos;
+    li.textContent = `${ok ? '✓ ' : ''}${fmt(h.asientos)} asientos: ${h.premio}`;
+    if (ok) li.className = 'hecho';
+    hl.appendChild(li);
+  });
+
+  $('pie').textContent = `Datos a ${R.fecha_datos || '—'}. Solo se muestran nombres de usuario públicos de quien pidió asiento. ¿Quieres quitar el tuyo? Escríbenos y lo retiramos.`;
+  dibujar(0);
+  const inicial = new URLSearchParams(location.search).get('asiento');
+  if (inicial) { $('q').value = inicial; buscar(inicial); }
+})();
+</script>
+</body>
+</html>
